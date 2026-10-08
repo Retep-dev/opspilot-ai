@@ -1,0 +1,19 @@
+# Architecture
+
+## Ownership
+
+LangGraph owns the agent graph, durable checkpoints, interrupts, and resume semantics. A request uses a stable graph thread ID tied to an operation ID. PostgreSQL-backed checkpoints must be configured before the graph runs in production.
+
+FastAPI and PostgreSQL own operation records, approval decisions, audit events, dispatch attempts, retry policy, idempotency, and authorization. Resume is initiated by an API command after checking reviewer role and draft version. The graph cannot directly send Slack messages or email.
+
+RAG ingestion writes tenant-scoped document chunks and embeddings to pgvector. Retrieval must filter by tenant and document access. A read-only customer-data adapter supplies tool results. Model and embedding adapters may target NVIDIA NIM; credentials remain server-side.
+
+Slack and email adapters receive an approved immutable action payload. A transactional outbox and unique idempotency key prevent duplicate sends across retries. Provider request IDs and responses are audited with sensitive fields redacted. n8n is optional for inbound triggers and edge delivery, never for checkpoints or approvals.
+
+## Trust boundaries
+
+The requester creates and views their own operations. A reviewer decides on a pending draft. An admin manages access and recovery. Every endpoint enforces identity and tenant scope server-side. Retrieved text and tool output are untrusted input, never authority to bypass approval. External actions need an exact approved payload hash.
+
+## Observability
+
+Every API request, graph run, tool call, retrieval, approval, and dispatch attempt carries an operation ID and trace ID. Structured logs redact secrets and customer content. Metrics include graph failure rate, approval wait time, retrieval latency, dispatch attempts, and dead-letter count.

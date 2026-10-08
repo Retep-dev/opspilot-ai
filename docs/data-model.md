@@ -1,0 +1,18 @@
+# Data model plan
+
+The initial scaffold does not create tables. The next milestone will add migrations for:
+
+| Entity | Core fields and constraints |
+| --- | --- |
+| `users` | ID, tenant ID, identity subject, role (`requester`, `reviewer`, `admin`) |
+| `operations` | ID, tenant ID, requester ID, status, graph thread ID, trace ID, timestamps, version |
+| `knowledge_documents` | ID, tenant ID, source, access scope, checksum, ingestion version |
+| `knowledge_chunks` | Document ID, chunk index, text, embedding vector, unique document/chunk index |
+| `action_drafts` | Operation ID, version, payload, payload hash, immutable after approval |
+| `approvals` | Operation ID, draft version/hash, reviewer ID, decision, reason, timestamp; one final decision per version |
+| `outbox_actions` | Operation ID, approved draft hash, provider, payload, idempotency key unique, status |
+| `dispatch_attempts` | Outbox ID, attempt number, provider request ID, result, next retry time |
+| `audit_events` | Operation ID, actor ID, event type, timestamp, redacted metadata, trace ID; append only |
+| LangGraph checkpoint tables | Managed by the PostgreSQL checkpointer, keyed by graph thread ID |
+
+All tenant-scoped queries must include tenant ID. Store only necessary customer references in operations; redact content from logs and provider error records. Use a database transaction when recording approval and queuing the associated outbox action.
