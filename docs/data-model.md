@@ -1,6 +1,6 @@
 # Data model plan
 
-The initial scaffold does not create tables. The next milestone will add migrations for:
+`backend/app/schema.sql` creates the first business schema. `python -m app.init_db` applies it and initializes LangGraph's PostgreSQL checkpoint tables. The schema is idempotent for a new database; future changes need versioned migrations.
 
 | Entity | Core fields and constraints |
 | --- | --- |

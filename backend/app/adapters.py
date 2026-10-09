@@ -23,7 +23,9 @@ class MockCustomerDataAdapter:
 
 
 class SlackAdapter(Protocol):
-    async def send_message(self, channel: str, text: str, idempotency_key: str) -> str: ...
+    async def send_message(
+        self, channel: str, text: str, idempotency_key: str
+    ) -> str: ...
 
 
 class EmailAdapter(Protocol):

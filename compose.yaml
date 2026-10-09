@@ -16,7 +16,7 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://opspilot:${POSTGRES_PASSWORD:-local-development-only}@db:5432/opspilot
+      DATABASE_URL: postgresql://opspilot:${POSTGRES_PASSWORD:-local-development-only}@db:5432/opspilot
       APP_ENV: development
     ports:
       - "8000:8000"
