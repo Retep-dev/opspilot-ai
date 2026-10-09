@@ -18,11 +18,35 @@ services:
     environment:
       DATABASE_URL: postgresql://opspilot:${POSTGRES_PASSWORD:-local-development-only}@db:5432/opspilot
       APP_ENV: development
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}
+      NVIDIA_NIM_API_KEY: ${NVIDIA_NIM_API_KEY:-}
+      NVIDIA_CHAT_MODEL: ${NVIDIA_CHAT_MODEL:-}
+      NVIDIA_EMBEDDING_MODEL: ${NVIDIA_EMBEDDING_MODEL:-}
+      NVIDIA_NIM_BASE_URL: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_EMBEDDING_URL: ${NVIDIA_EMBEDDING_URL:-https://ai.api.nvidia.com/v1/retrieval/nvidia/embeddings}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+  worker:
+    profiles: ["dispatch"]
+    build: ./backend
+    restart: on-failure
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql://opspilot:${POSTGRES_PASSWORD:-local-development-only}@db:5432/opspilot
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+    depends_on:
+      backend:
+        condition: service_started
   frontend:
     build: ./frontend
     ports:

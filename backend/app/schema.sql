@@ -109,3 +109,24 @@ CREATE INDEX IF NOT EXISTS outbox_pending_idx
     ON outbox_actions (status, created_at);
 CREATE INDEX IF NOT EXISTS knowledge_documents_tenant_scope_idx
     ON knowledge_documents (tenant_id, access_scope);
+CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx
+    ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
+    WHERE embedding IS NOT NULL;
+
+ALTER TABLE operations DROP CONSTRAINT IF EXISTS operations_status_check;
+ALTER TABLE operations ADD CONSTRAINT operations_status_check CHECK (status IN (
+    'RECEIVED', 'DRAFTING', 'AWAITING_APPROVAL', 'APPROVED',
+    'REJECTED', 'DISPATCHING', 'RETRY_PENDING', 'DELIVERY_UNKNOWN',
+    'COMPLETED', 'FAILED', 'CANCELLED'
+));
+
+ALTER TABLE outbox_actions DROP CONSTRAINT IF EXISTS outbox_actions_status_check;
+ALTER TABLE outbox_actions ADD CONSTRAINT outbox_actions_status_check CHECK (status IN (
+    'held', 'pending', 'sending', 'retry_pending', 'unknown', 'sent', 'failed'
+));
+ALTER TABLE outbox_actions ADD COLUMN IF NOT EXISTS provider_receipt_id text;
+ALTER TABLE outbox_actions ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0;
+ALTER TABLE outbox_actions ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz;
+ALTER TABLE outbox_actions ADD COLUMN IF NOT EXISTS claimed_at timestamptz;
+ALTER TABLE outbox_actions ADD COLUMN IF NOT EXISTS unknown_since timestamptz;
+ALTER TABLE outbox_actions ADD COLUMN IF NOT EXISTS last_error_code text;

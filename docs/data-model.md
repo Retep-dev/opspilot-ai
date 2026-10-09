@@ -1,6 +1,6 @@
 # Data model plan
 
-`backend/app/schema.sql` creates the first business schema. `python -m app.init_db` applies it and initializes LangGraph's PostgreSQL checkpoint tables. The schema is idempotent for a new database; future changes need versioned migrations.
+`backend/app/schema.sql` creates and upgrades the current business schema. `python -m app.init_db` applies it and initializes LangGraph's PostgreSQL checkpoint tables. The SQL is idempotent for the current schema; future changes need versioned migrations.
 
 | Entity | Core fields and constraints |
 | --- | --- |

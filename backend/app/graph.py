@@ -8,11 +8,23 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from app.adapters import CustomerDataAdapter
-from app.models import ActionDraft, ApprovalDecision, Evidence, Recommendation
+from app.models import (
+    ActionDraft,
+    ApprovalDecision,
+    Evidence,
+    GeneratedDraft,
+    Recommendation,
+)
 
 
 class KnowledgeRetriever(Protocol):
     async def search(self, tenant_id: str, query: str) -> list[Evidence]: ...
+
+
+class GenerationAdapter(Protocol):
+    async def generate(
+        self, request: str, evidence: list[dict], customer_status: str | None
+    ) -> GeneratedDraft: ...
 
 
 class GraphState(TypedDict, total=False):
@@ -33,7 +45,10 @@ def draft_hash(draft: dict) -> str:
 
 
 def build_graph(
-    retriever: KnowledgeRetriever, customer_data: CustomerDataAdapter, checkpointer
+    retriever: KnowledgeRetriever,
+    customer_data: CustomerDataAdapter,
+    checkpointer,
+    model: GenerationAdapter | None = None,
 ):
     async def retrieve(state: GraphState) -> GraphState:
         evidence = await retriever.search(state["tenant_id"], state["request_text"])
@@ -44,7 +59,17 @@ def build_graph(
         record = await customer_data.get_customer(customer_id) if customer_id else None
         return {"customer_status": record.account_status if record else None}
 
-    def draft(state: GraphState) -> GraphState:
+    async def draft(state: GraphState) -> GraphState:
+        if model is not None:
+            generated = await model.generate(
+                state["request_text"], state["evidence"], state.get("customer_status")
+            )
+            payload = generated.draft.model_dump(mode="json")
+            return {
+                "recommendation": generated.recommendation.model_dump(mode="json"),
+                "draft": payload,
+                "draft_hash": draft_hash(payload),
+            }
         evidence = [Evidence.model_validate(item) for item in state["evidence"]]
         status = state.get("customer_status")
         summary = f"Review the operations request for customer {state.get('customer_id') or 'unknown'}."

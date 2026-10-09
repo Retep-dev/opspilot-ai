@@ -33,3 +33,8 @@ class ApprovalDecision(BaseModel):
     decision: Literal["approved", "rejected"]
     draft_hash: str
     reason: str | None = None
+
+
+class GeneratedDraft(BaseModel):
+    recommendation: Recommendation
+    draft: ActionDraft

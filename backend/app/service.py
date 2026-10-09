@@ -25,6 +25,27 @@ class OperationService:
         self.database_url = database_url
         self.graph = graph
 
+    async def get(self, actor: Actor, operation_id: UUID) -> dict:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as conn:
+            cursor = await conn.execute(
+                """SELECT o.id, o.status, o.requester_id, o.failure_code,
+                          d.payload, d.payload_hash
+                   FROM operations o LEFT JOIN action_drafts d
+                     ON d.operation_id = o.id AND d.version = 1
+                   WHERE o.id = %s AND o.tenant_id = %s""",
+                (operation_id, actor.tenant_id),
+            )
+            row = await cursor.fetchone()
+        if row is None or (actor.role == "requester" and row[2] != actor.user_id):
+            raise LookupError("Operation not found")
+        return {
+            "id": str(row[0]),
+            "status": row[1],
+            "failure_code": row[3],
+            "draft": row[4],
+            "draft_hash": row[5],
+        }
+
     async def create(self, actor: Actor, request: OperationRequest) -> UUID:
         if actor.role not in {"requester", "reviewer", "admin"}:
             raise PermissionError("Requester role required")
@@ -180,7 +201,7 @@ class OperationService:
                             """INSERT INTO outbox_actions
                                (id, operation_id, draft_version, draft_hash, provider,
                                 payload, idempotency_key, status)
-                               VALUES (%s, %s, 1, %s, %s, %s, %s, 'pending')""",
+                               VALUES (%s, %s, 1, %s, %s, %s, %s, 'held')""",
                             (
                                 uuid4(),
                                 operation_id,
@@ -206,11 +227,19 @@ class OperationService:
         """Repeatable after a crash between approval commit and graph resume."""
         config = {"configurable": {"thread_id": str(operation_id)}}
         snapshot = await self.graph.aget_state(config)
-        if snapshot.values.get("decision") == decision.decision:
-            return
-        if not snapshot.next or "await_approval" not in snapshot.next:
-            raise RuntimeError("Graph is not waiting for the recorded approval")
-        await self.graph.ainvoke(Command(resume=decision.model_dump()), config)
+        if snapshot.values.get("decision") != decision.decision:
+            if not snapshot.next or "await_approval" not in snapshot.next:
+                raise RuntimeError("Graph is not waiting for the recorded approval")
+            await self.graph.ainvoke(Command(resume=decision.model_dump()), config)
+        if decision.decision == "approved":
+            async with await psycopg.AsyncConnection.connect(self.database_url) as conn:
+                async with conn.transaction():
+                    await conn.execute(
+                        """UPDATE outbox_actions SET status = 'pending'
+                           WHERE operation_id = %s AND draft_hash = %s
+                             AND status = 'held'""",
+                        (operation_id, decision.draft_hash),
+                    )
 
     @staticmethod
     async def _audit(conn, tenant_id, operation_id, actor_id, event_type, trace_id):
