@@ -9,6 +9,7 @@ from langgraph.types import Command
 from psycopg.types.json import Jsonb
 
 from app.models import ApprovalDecision, OperationRequest
+from app.observability import current_request_id, log_event
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class OperationService:
         if actor.role not in {"requester", "reviewer", "admin"}:
             raise PermissionError("Requester role required")
         operation_id = uuid4()
-        trace_id = uuid4()
+        trace_id = UUID(current_request_id()) if current_request_id() else uuid4()
         thread_id = str(operation_id)
         async with await psycopg.AsyncConnection.connect(self.database_url) as conn:
             async with conn.transaction():
@@ -114,8 +115,11 @@ class OperationService:
                         trace_id,
                     )
         except Exception:
-            logger.exception(
-                "operation draft failed", extra={"operation_id": thread_id}
+            log_event(
+                logger,
+                "operation.draft_failed",
+                tenant_id=str(actor.tenant_id),
+                workflow_thread_id=thread_id,
             )
             async with await psycopg.AsyncConnection.connect(self.database_url) as conn:
                 async with conn.transaction():
@@ -134,6 +138,12 @@ class OperationService:
                         trace_id,
                     )
             raise
+        log_event(
+            logger,
+            "operation.awaiting_approval",
+            tenant_id=str(actor.tenant_id),
+            workflow_thread_id=thread_id,
+        )
         return operation_id
 
     async def decide(
@@ -220,6 +230,12 @@ class OperationService:
                         trace_id,
                     )
         await self.recover_resume(operation_id, decision)
+        log_event(
+            logger,
+            f"operation.{decision.decision}",
+            tenant_id=str(actor.tenant_id),
+            workflow_thread_id=str(operation_id),
+        )
 
     async def recover_resume(
         self, operation_id: UUID, decision: ApprovalDecision

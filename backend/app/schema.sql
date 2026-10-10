@@ -8,6 +8,16 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE (tenant_id, identity_subject)
 );
 
+CREATE TABLE IF NOT EXISTS customer_accounts (
+    tenant_id uuid NOT NULL,
+    customer_id text NOT NULL,
+    account_status text NOT NULL CHECK (account_status IN (
+        'active', 'past_due', 'suspended', 'closed'
+    )),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, customer_id)
+);
+
 CREATE TABLE IF NOT EXISTS operations (
     id uuid PRIMARY KEY,
     tenant_id uuid NOT NULL,
@@ -40,7 +50,7 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
     document_id uuid NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
     chunk_index integer NOT NULL,
     content text NOT NULL,
-    embedding vector(1024),
+    embedding halfvec(2048),
     PRIMARY KEY (document_id, chunk_index)
 );
 
@@ -110,7 +120,7 @@ CREATE INDEX IF NOT EXISTS outbox_pending_idx
 CREATE INDEX IF NOT EXISTS knowledge_documents_tenant_scope_idx
     ON knowledge_documents (tenant_id, access_scope);
 CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx
-    ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
+    ON knowledge_chunks USING hnsw (embedding halfvec_cosine_ops)
     WHERE embedding IS NOT NULL;
 
 ALTER TABLE operations DROP CONSTRAINT IF EXISTS operations_status_check;

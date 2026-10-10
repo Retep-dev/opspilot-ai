@@ -9,7 +9,12 @@ import psycopg
 import pytest
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from app.adapters import CustomerRecord, MockCustomerDataAdapter
+from app.adapters import (
+    CustomerRecord,
+    MockCustomerDataAdapter,
+    PostgresCustomerDataAdapter,
+)
+from app.customer import CustomerAccountInput, CustomerAccountStore
 from app.graph import build_graph
 from app.knowledge import KnowledgeIngestor, KnowledgeInput
 from app.models import ApprovalDecision, Evidence, OperationRequest
@@ -96,10 +101,10 @@ def test_approval_persists_outbox_and_resumes_graph() -> None:
 
 class FakeEmbedder:
     async def embed_query(self, text: str) -> list[float]:
-        return [0.1] * 1024
+        return [0.1] * 2048
 
     async def embed_passage(self, text: str) -> list[float]:
-        return [0.1] * 1024
+        return [0.1] * 2048
 
 
 class FakeProvider:
@@ -150,17 +155,36 @@ def test_ingestion_retry_idempotency_and_unknown_reconciliation() -> None:
             str(tenant_id), "billing"
         )
         assert evidence[0].source == "runbook"
+        await CustomerAccountStore(url).upsert(
+            tenant_id,
+            CustomerAccountInput(customer_id="c-real", account_status="active"),
+        )
+        customer_adapter = PostgresCustomerDataAdapter(url)
+        assert (
+            await customer_adapter.get_customer(str(tenant_id), "c-real")
+        ).account_status == "active"
+        assert await customer_adapter.get_customer(str(uuid4()), "c-real") is None
         async with AsyncPostgresSaver.from_conn_string(url) as checkpointer:
             await checkpointer.setup()
             graph = build_graph(
-                FakeRetriever(), MockCustomerDataAdapter(), checkpointer
+                PgVectorRetriever(url, embedder), customer_adapter, checkpointer
             )
             service = OperationService(url, graph)
 
             async def approved_operation() -> tuple:
                 operation_id = await service.create(
                     Actor(requester_id, tenant_id, "requester"),
-                    OperationRequest(request_text="Escalate case"),
+                    OperationRequest(
+                        request_text="Escalate billing case", customer_id="c-real"
+                    ),
+                )
+                snapshot = await graph.aget_state(
+                    {"configurable": {"thread_id": str(operation_id)}}
+                )
+                assert snapshot.values["customer_status"] == "active"
+                assert (
+                    snapshot.values["recommendation"]["evidence"][0]["source"]
+                    == "runbook"
                 )
                 async with await psycopg.AsyncConnection.connect(url) as conn:
                     cursor = await conn.execute(

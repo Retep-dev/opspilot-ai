@@ -3,7 +3,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.auth import get_actor
-from app.main import app, get_ingestor, get_service
+from app.main import app, get_customer_store, get_ingestor, get_service
 from app.service import Actor
 
 
@@ -20,10 +20,16 @@ class FakeIngestor:
         return uuid4()
 
 
+class FakeCustomerStore:
+    async def upsert(self, tenant_id, account):
+        return None
+
+
 def test_api_enforces_requester_reviewer_admin_roles() -> None:
     tenant_id, user_id = uuid4(), uuid4()
     app.dependency_overrides[get_service] = lambda: FakeService()
     app.dependency_overrides[get_ingestor] = lambda: FakeIngestor()
+    app.dependency_overrides[get_customer_store] = lambda: FakeCustomerStore()
     app.dependency_overrides[get_actor] = lambda: Actor(user_id, tenant_id, "requester")
     try:
         with TestClient(app) as client:
@@ -49,6 +55,13 @@ def test_api_enforces_requester_reviewer_admin_roles() -> None:
                         "content": "text",
                         "ingestion_version": 1,
                     },
+                ).status_code
+                == 403
+            )
+            assert (
+                client.put(
+                    "/customer-accounts/c-1",
+                    json={"customer_id": "c-1", "account_status": "active"},
                 ).status_code
                 == 403
             )
@@ -86,6 +99,13 @@ def test_api_enforces_requester_reviewer_admin_roles() -> None:
                     },
                 ).status_code
                 == 201
+            )
+            assert (
+                client.put(
+                    "/customer-accounts/c-1",
+                    json={"customer_id": "c-1", "account_status": "active"},
+                ).status_code
+                == 200
             )
     finally:
         app.dependency_overrides.clear()

@@ -6,7 +6,7 @@ LangGraph owns the agent graph, durable checkpoints, interrupts, and resume sema
 
 FastAPI and PostgreSQL own operation records, approval decisions, audit events, dispatch attempts, retry policy, idempotency, and authorization. Resume is initiated by an API command after checking reviewer role and draft version. The graph cannot directly send Slack messages or email.
 
-RAG ingestion writes tenant-scoped document chunks and embeddings to pgvector. Retrieval must filter by tenant and document access. A read-only customer-data adapter supplies tool results. Model and embedding adapters may target NVIDIA NIM; credentials remain server-side.
+RAG ingestion writes tenant-scoped document chunks and embeddings to pgvector. Retrieval filters by tenant and document access. A read-only PostgreSQL customer-data adapter supplies tool results from an admin-managed local account table. Model and embedding adapters target NVIDIA NIM; credentials remain server-side.
 
 Slack and email adapters receive an approved immutable action payload. A transactional outbox and unique idempotency key prevent duplicate sends across retries. Provider request IDs and responses are audited with sensitive fields redacted. n8n is optional for inbound triggers and edge delivery, never for checkpoints or approvals.
 

@@ -56,7 +56,11 @@ def build_graph(
 
     async def inspect(state: GraphState) -> GraphState:
         customer_id = state.get("customer_id")
-        record = await customer_data.get_customer(customer_id) if customer_id else None
+        record = (
+            await customer_data.get_customer(state["tenant_id"], customer_id)
+            if customer_id
+            else None
+        )
         return {"customer_status": record.account_status if record else None}
 
     async def draft(state: GraphState) -> GraphState:

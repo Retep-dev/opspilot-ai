@@ -25,7 +25,7 @@ services:
       NVIDIA_CHAT_MODEL: ${NVIDIA_CHAT_MODEL:-}
       NVIDIA_EMBEDDING_MODEL: ${NVIDIA_EMBEDDING_MODEL:-}
       NVIDIA_NIM_BASE_URL: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
-      NVIDIA_EMBEDDING_URL: ${NVIDIA_EMBEDDING_URL:-https://ai.api.nvidia.com/v1/retrieval/nvidia/embeddings}
+      NVIDIA_EMBEDDING_URL: ${NVIDIA_EMBEDDING_URL:-https://integrate.api.nvidia.com/v1/embeddings}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
@@ -44,6 +44,9 @@ services:
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
+      OPSPILOT_LIVE_TEST_MODE: ${OPSPILOT_LIVE_TEST_MODE:-false}
+      SLACK_TEST_CHANNEL_ID: ${SLACK_TEST_CHANNEL_ID:-}
+      TEST_RECIPIENT_EMAIL: ${TEST_RECIPIENT_EMAIL:-}
     depends_on:
       backend:
         condition: service_started

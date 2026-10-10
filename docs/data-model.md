@@ -5,6 +5,7 @@
 | Entity | Core fields and constraints |
 | --- | --- |
 | `users` | ID, tenant ID, identity subject, role (`requester`, `reviewer`, `admin`) |
+| `customer_accounts` | Tenant ID, customer ID, account status, updated timestamp; tenant/customer composite key |
 | `operations` | ID, tenant ID, requester ID, status, graph thread ID, trace ID, timestamps, version |
 | `knowledge_documents` | ID, tenant ID, source, access scope, checksum, ingestion version |
 | `knowledge_chunks` | Document ID, chunk index, text, embedding vector, unique document/chunk index |

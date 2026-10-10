@@ -7,6 +7,8 @@ import pytest
 from app.models import ActionDraft
 from app.nim import NimClient
 from app.providers import (
+    LiveTestGuard,
+    PermanentDeliveryError,
     Receipt,
     ResendEmailProvider,
     SlackProvider,
@@ -47,18 +49,93 @@ def test_nim_generation_and_embedding_contracts() -> None:
                     ]
                 },
             )
-        return httpx.Response(200, json={"data": [{"embedding": [0.1] * 1024}]})
+        return httpx.Response(200, json={"data": [{"embedding": [0.1] * 2048}]})
 
     async def scenario() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             nim = NimClient("test-key", "chat-model", "embed-model", client=client)
             generated = await nim.generate("Check case", [], "active")
             assert generated.draft.provider == "email"
-            assert len(await nim.embed_query("question")) == 1024
-            assert len(await nim.embed_passage("answer")) == 1024
+            assert len(await nim.embed_query("question")) == 2048
+            assert len(await nim.embed_passage("answer")) == 2048
         assert requests[0].headers["authorization"] == "Bearer test-key"
+        assert json.loads(requests[0].content)["max_tokens"] == 1024
         assert json.loads(requests[1].content)["input_type"] == "query"
         assert json.loads(requests[2].content)["input_type"] == "passage"
+
+    asyncio.run(scenario())
+
+
+def test_glm_generation_limits_reasoning_for_structured_output() -> None:
+    requests = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": """```json\n{"recommendation":{"summary":"Review","evidence":[],"uncertainty":"Test","risk_level":"low"},"draft":{"provider":"slack","destination":"C1","body":"[OpsPilot TEST] Review"}}\n```"""
+                        }
+                    }
+                ]
+            },
+        )
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            nim = NimClient("test-key", "z-ai/glm-5.3", "embed-model", client=client)
+            result = await nim.generate("Synthetic request", [], "active")
+            assert result.draft.provider == "slack"
+        body = json.loads(requests[0].content)
+        assert body["reasoning_effort"] == "low"
+        assert body["chat_template_kwargs"] == {"clear_thinking": True}
+
+    asyncio.run(scenario())
+
+
+def test_live_test_guard_blocks_unapproved_destinations_and_unlabeled_content() -> None:
+    sent = []
+
+    class Provider:
+        async def send(self, draft: ActionDraft, key: str) -> Receipt:
+            sent.append((draft, key))
+            return Receipt("receipt-1")
+
+    async def scenario() -> None:
+        slack = LiveTestGuard(Provider(), "C-APPROVED")
+        with pytest.raises(PermanentDeliveryError):
+            await slack.send(
+                ActionDraft(
+                    provider="slack", destination="C-OTHER", body="[OpsPilot TEST] hi"
+                ),
+                "key",
+            )
+        with pytest.raises(PermanentDeliveryError):
+            await slack.send(
+                ActionDraft(provider="slack", destination="C-APPROVED", body="hi"),
+                "key",
+            )
+        email = LiveTestGuard(Provider(), "approved@example.com")
+        with pytest.raises(PermanentDeliveryError):
+            await email.send(
+                ActionDraft(
+                    provider="email",
+                    destination="approved@example.com",
+                    subject="Unlabeled",
+                    body="[OpsPilot TEST] hi",
+                ),
+                "key",
+            )
+        assert await slack.send(
+            ActionDraft(
+                provider="slack", destination="C-APPROVED", body="[OpsPilot TEST] hi"
+            ),
+            "key",
+        ) == Receipt("receipt-1")
+        assert len(sent) == 1
 
     asyncio.run(scenario())
 

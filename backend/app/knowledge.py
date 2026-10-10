@@ -41,8 +41,8 @@ class KnowledgeIngestor:
         checksum = hashlib.sha256(document.content.encode()).hexdigest()
         chunks = chunk_text(document.content)
         vectors = [await self.embeddings.embed_passage(chunk) for chunk in chunks]
-        if any(len(vector) != 1024 for vector in vectors):
-            raise ValueError("Embedding adapter must return 1024 dimensions")
+        if any(len(vector) != 2048 for vector in vectors):
+            raise ValueError("Embedding adapter must return 2048 dimensions")
         document_id = uuid4()
         async with await psycopg.AsyncConnection.connect(self.database_url) as conn:
             async with conn.transaction():
@@ -78,7 +78,7 @@ class KnowledgeIngestor:
                     await conn.execute(
                         """INSERT INTO knowledge_chunks
                            (document_id, chunk_index, content, embedding)
-                           VALUES (%s, %s, %s, %s::vector)""",
+                           VALUES (%s, %s, %s, %s::halfvec)""",
                         (document_id, index, chunk, value),
                     )
         return document_id

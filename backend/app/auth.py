@@ -9,6 +9,7 @@ import psycopg
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.observability import set_tenant
 from app.service import Actor
 
 bearer = HTTPBearer(auto_error=False)
@@ -66,6 +67,7 @@ async def get_actor(
         row = await cursor.fetchone()
     if row is None:
         raise HTTPException(status_code=403, detail="User is not provisioned")
+    set_tenant(str(tenant_id))
     return Actor(user_id=row[0], tenant_id=tenant_id, role=row[1])
 
 

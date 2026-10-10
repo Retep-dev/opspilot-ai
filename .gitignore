@@ -11,7 +11,9 @@
 *credentials*.json
 *service-account*.json
 node_modules/
+.npm-cache/
 .next/
+*.tsbuildinfo
 dist/
 build/
 *.egg-info/

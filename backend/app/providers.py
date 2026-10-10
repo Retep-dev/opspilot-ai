@@ -25,6 +25,27 @@ class UnknownDeliveryOutcome(Exception):
     pass
 
 
+class LiveTestGuard:
+    """Constrain a live verification worker to approved test destinations/content."""
+
+    def __init__(self, provider: object, destination: str) -> None:
+        if not destination:
+            raise ValueError("Live test destination required")
+        self.provider = provider
+        self.destination = destination
+
+    async def send(self, draft: ActionDraft, key: str) -> Receipt:
+        if draft.destination != self.destination:
+            raise PermanentDeliveryError("live_test_destination_mismatch")
+        if not draft.body.startswith("[OpsPilot TEST]"):
+            raise PermanentDeliveryError("live_test_label_required")
+        if draft.provider == "email" and not (draft.subject or "").startswith(
+            "[OpsPilot TEST]"
+        ):
+            raise PermanentDeliveryError("live_test_subject_label_required")
+        return await self.provider.send(draft, key)
+
+
 class SlackProvider:
     def __init__(self, token: str, client: httpx.AsyncClient | None = None) -> None:
         self.token = token

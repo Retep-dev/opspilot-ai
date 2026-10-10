@@ -10,6 +10,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.models import ActionDraft
+from app.observability import log_event
 from app.providers import (
     PermanentDeliveryError,
     Receipt,
@@ -68,9 +69,15 @@ class OutboxDispatcher:
             await self._settle(action, "failed", str(error))
         except UnknownDeliveryOutcome as error:
             await self._settle(action, "unknown", str(error))
-        except Exception:
-            logger.exception(
-                "unexpected dispatch result", extra={"action_id": str(action.id)}
+        except Exception:  # noqa: BLE001 - an uncertain send must be quarantined
+            log_event(
+                logger,
+                "dispatch.unexpected_result",
+                request_id=str(action.trace_id),
+                tenant_id=str(action.tenant_id),
+                workflow_thread_id=str(action.operation_id),
+                provider_attempt_id=f"{action.id}:{action.attempt}",
+                retry_count=action.attempt - 1,
             )
             # The request may have reached the provider. Quarantine the action.
             await self._settle(action, "unknown", "unexpected_provider_error")
@@ -188,6 +195,16 @@ class OutboxDispatcher:
                         Jsonb({"attempt": action.attempt, "provider": action.provider}),
                     ),
                 )
+        log_event(
+            logger,
+            f"dispatch.{outcome}",
+            request_id=str(action.trace_id),
+            tenant_id=str(action.tenant_id),
+            workflow_thread_id=str(action.operation_id),
+            provider_attempt_id=f"{action.id}:{action.attempt}",
+            external_receipt_id=receipt_id,
+            retry_count=action.attempt - 1,
+        )
 
     async def mark_stale_unknown(self, older_than_seconds: int = 120) -> int:
         """Quarantine claimed sends after worker crashes; never resend blindly."""

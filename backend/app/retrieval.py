@@ -18,8 +18,8 @@ class PgVectorRetriever:
 
     async def search(self, tenant_id: str, query: str) -> list[Evidence]:
         embedding = await self.embeddings.embed_query(query)
-        if len(embedding) != 1024:
-            raise ValueError("Embedding adapter must return 1024 dimensions")
+        if len(embedding) != 2048:
+            raise ValueError("Embedding adapter must return 2048 dimensions")
         vector = "[" + ",".join(str(value) for value in embedding) + "]"
         async with await psycopg.AsyncConnection.connect(self.database_url) as conn:
             async with conn.cursor() as cursor:
@@ -28,7 +28,7 @@ class PgVectorRetriever:
                        FROM knowledge_chunks c
                        JOIN knowledge_documents d ON d.id = c.document_id
                        WHERE d.tenant_id = %s AND d.access_scope = 'operations'
-                       ORDER BY c.embedding <=> %s::vector
+                       ORDER BY c.embedding <=> %s::halfvec
                        LIMIT 5""",
                     (tenant_id, vector),
                 )
